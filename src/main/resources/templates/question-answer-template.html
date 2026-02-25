@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<h2>Question Paper</h2>
+<table style="width:100%;">
+
+    <th:block th:each="question, iterStat : ${questions}">
+        <tr>
+            <td style='width: 100%; padding-bottom: 10px; padding-top: 20px;' colspan='2'>
+                <strong>
+                    <span class="counter" th:utext="'Q' + ${iterStat.index + 1} + ') '"></span>
+                    <span class="title" th:utext="${question.question}"></span>
+                </strong>
+            </td>
+        </tr>
+        <tr>
+            <td style='width: 50%; padding: 0px; margin: 0px;'>
+                <span>&nbsp;&nbsp;&nbsp;&nbsp;A)</span>
+                <span th:utext="${question.option1}"></span>
+            </td>
+            <td style="width: 50%; padding: 0px; margin: 0px;">
+                <span>&nbsp;&nbsp;&nbsp;&nbsp;B)</span>
+                <span th:utext="${question.option2}"></span>
+            </td>
+        </tr>
+        <tr>
+            <td style='width: 50%; padding: 0px; margin: 0px;'>
+                <span>&nbsp;&nbsp;&nbsp;&nbsp;C)</span>
+                <span th:utext="${question.option3}"></span>
+            </td>
+            <td style="width: 50%; padding: 0px; margin: 0px;">
+                <span>&nbsp;&nbsp;&nbsp;&nbsp;D)</span>
+                <span th:utext="${question.option4}"></span>
+            </td>
+        </tr>
+    </th:block>
+</table>
+</body>
+</html>
