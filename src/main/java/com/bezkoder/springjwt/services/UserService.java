@@ -85,6 +85,8 @@ public interface UserService {
 
     List<PendingRolesList> pendingAdminList();
 
+    MainResponse deleteAdmin(Long adminId);
+
     MainResponse acceptUser(Long id, Long acceptby);
 
     List<DashBoardDetails> dashBoardDetails();

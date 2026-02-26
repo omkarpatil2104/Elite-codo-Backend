@@ -552,6 +552,83 @@ public class AuthController {
         }
     }
 
+    @DeleteMapping("/deleteadmin/{id}")
+    public ResponseEntity<?> deleteAdmin(@PathVariable("id") Long id) {
+        try {
+            if (id == null || id <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(new MainResponse("Valid admin ID is required", 400, false));
+            }
+
+            MainResponse mainResponse = this.userService.deleteAdmin(id);
+
+            if (Boolean.TRUE.equals(mainResponse.getFlag())) {
+                logger.info("Admin deleted successfully with ID: {}", id);
+                return new ResponseEntity<>(mainResponse, HttpStatus.OK);
+            } else {
+                logger.warn("Admin deletion failed for ID: {}. Response: {}",
+                        id, mainResponse.getMessage());
+                return new ResponseEntity<>(mainResponse, HttpStatus.BAD_REQUEST);
+            }
+        } catch (Exception e) {
+            logger.error("Error deleting admin with ID {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MainResponse("Internal server error deleting admin: " + e.getMessage(),
+                            500, false));
+        }
+    }
+
+    @DeleteMapping("/bulk-delete-admins")
+    public ResponseEntity<?> bulkDeleteAdmins(@RequestBody List<Long> adminIds) {
+        try {
+            if (adminIds == null || adminIds.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(new MainResponse("Admin IDs are required", 400, false));
+            }
+
+            List<MainResponse> results = new ArrayList<>();
+            List<Long> successfulDeletions = new ArrayList<>();
+            List<Long> failedDeletions = new ArrayList<>();
+
+            for (Long id : adminIds) {
+                try {
+                    MainResponse response = this.userService.deleteAdmin(id);
+                    if (Boolean.TRUE.equals(response.getFlag())) {
+                        successfulDeletions.add(id);
+                    } else {
+                        failedDeletions.add(id);
+                    }
+                } catch (Exception e) {
+                    failedDeletions.add(id);
+                    logger.error("Error deleting admin ID {}: {}", id, e.getMessage());
+                }
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("successfulDeletions", successfulDeletions);
+            response.put("failedDeletions", failedDeletions);
+            response.put("totalProcessed", adminIds.size());
+            response.put("successCount", successfulDeletions.size());
+            response.put("failureCount", failedDeletions.size());
+            response.put("message", String.format("Processed %d admins. Success: %d, Failed: %d",
+                    adminIds.size(),
+                    successfulDeletions.size(),
+                    failedDeletions.size()));
+
+            if (failedDeletions.isEmpty()) {
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.MULTI_STATUS).body(response);
+            }
+
+        } catch (Exception e) {
+            logger.error("Error bulk deleting admins: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MainResponse("Internal server error bulk deleting admins: " + e.getMessage(),
+                            500, false));
+        }
+    }
+
     @GetMapping("/getallactiveteachers")
     public ResponseEntity<?> getAllActiveModerators() {
         try {

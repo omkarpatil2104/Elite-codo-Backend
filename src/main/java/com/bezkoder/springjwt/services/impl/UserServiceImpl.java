@@ -2884,6 +2884,133 @@ public class UserServiceImpl implements UserService {
         );
     }
 
+    @Override
+    @Transactional
+    public MainResponse deleteAdmin(Long adminId) {
+        logger.info("Starting deletion process for admin with ID: {}", adminId);
+
+        try {
+            // Fetch the admin user
+            Optional<User> adminOpt = userRepository.findById(adminId);
+            if (!adminOpt.isPresent()) {
+                logger.warn("Admin not found with ID: {}", adminId);
+                return new MainResponse("Admin not found with ID: " + adminId, 404, false);
+            }
+
+            User admin = adminOpt.get();
+
+            // Verify that this is actually an admin
+            boolean isAdmin = admin.getRoles().stream()
+                    .anyMatch(role -> role.getName() == ERole.ROLE_ADMIN);
+
+            if (!isAdmin) {
+                logger.warn("User with ID {} is not an admin", adminId);
+                return new MainResponse("User is not an admin", 400, false);
+            }
+
+            // Check if it's SUPER_ADMIN (can't delete super admin)
+            boolean isSuperAdmin = admin.getRoles().stream()
+                    .anyMatch(role -> role.getName() == ERole.ROLE_SUPER_ADMIN);
+
+            if (isSuperAdmin) {
+                logger.warn("Attempt to delete SUPER_ADMIN with ID: {}", adminId);
+                return new MainResponse("SUPER_ADMIN cannot be deleted", 400, false);
+            }
+
+            // 1. Handle all users created by this admin
+            List<User> createdUsers = userRepository.findByCreatorId(adminId);
+            if (createdUsers != null && !createdUsers.isEmpty()) {
+                logger.info("Found {} users created by admin {}", createdUsers.size(), adminId);
+
+                for (User user : createdUsers) {
+                    try {
+                        user.setCreatorId(null);
+                        user.setStatus("InActive");
+                        userRepository.save(user);
+                        logger.debug("Updated user {} created by admin", user.getId());
+                    } catch (Exception e) {
+                        logger.error("Error updating user {}: {}", user.getId(), e.getMessage());
+                    }
+                }
+            }
+
+            // 2. Handle user management mappings
+            try {
+                List<UserManagementMaster> userManagements = userManagementMasterRepository.getAllByTeacherId(adminId);
+                if (userManagements != null && !userManagements.isEmpty()) {
+                    logger.info("Deleting {} user management records for admin", userManagements.size());
+                    userManagementMasterRepository.deleteAll(userManagements);
+                }
+            } catch (Exception e) {
+                logger.error("Error deleting user management records: {}", e.getMessage());
+            }
+
+            // 3. Handle student management mappings
+            try {
+                List<StudentManagementMaster> studentManagements = studentManagementRepository.getAllByStudentId(adminId);
+                if (studentManagements != null && !studentManagements.isEmpty()) {
+                    logger.info("Deleting {} student management records for admin", studentManagements.size());
+                    studentManagementRepository.deleteAll(studentManagements);
+                }
+            } catch (Exception e) {
+                logger.error("Error deleting student management records: {}", e.getMessage());
+            }
+
+            // 4. Handle teacher-student mappings - Using existing repository method
+            try {
+                List<Long> studentIds = userRepository.findStudentsByTeacherId(adminId);
+                if (studentIds != null && !studentIds.isEmpty()) {
+                    logger.info("Found {} students with teacher ID {}", studentIds.size(), adminId);
+
+                    for (Long studentId : studentIds) {
+                        try {
+                            Optional<User> studentOpt = userRepository.findById(studentId);
+                            if (studentOpt.isPresent()) {
+                                User student = studentOpt.get();
+                                student.getTeacher().removeIf(teacher -> teacher.getId().equals(adminId));
+                                userRepository.save(student);
+                            }
+                        } catch (Exception e) {
+                            logger.error("Error updating student {}: {}", studentId, e.getMessage());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("Error handling teacher-student mappings: {}", e.getMessage());
+            }
+
+            // 5. Delete all associations using repository methods
+            try {
+                userRepository.deleteUserRoles(adminId);
+                userRepository.deleteUserSubjects(adminId);
+                userRepository.deleteUserStandards(adminId);
+                userRepository.deleteUserEntranceExams(adminId);
+                userRepository.deleteTeacherStudentMapping(adminId);
+                userRepository.deleteTeacherPatterns(adminId);
+                logger.debug("Deleted all associations for admin {}", adminId);
+            } catch (Exception e) {
+                logger.error("Error deleting associations: {}", e.getMessage());
+            }
+
+            // 6. Soft delete the admin
+            admin.setStatus("Deleted");
+            if (admin.getEmail() != null) {
+                admin.setEmail(admin.getEmail() + "_deleted_" + System.currentTimeMillis());
+            }
+            if (admin.getMobile() != null) {
+                admin.setMobile(admin.getMobile() + "_deleted");
+            }
+            userRepository.save(admin);
+
+            logger.info("Successfully deleted admin with ID: {}", adminId);
+            return new MainResponse("Admin deleted successfully", 200, true);
+
+        } catch (Exception e) {
+            logger.error("Error deleting admin {}: {}", adminId, e.getMessage(), e);
+            return new MainResponse("Failed to delete admin: " + e.getMessage(), 500, false);
+        }
+    }
+
     private boolean canAddNewRole(User existingUser, ERole newRole) {
         if (existingUser.getRoles() == null || existingUser.getRoles().isEmpty()) {
             return true;
